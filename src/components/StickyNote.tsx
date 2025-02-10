@@ -21,8 +21,12 @@ export default function StickyNote({
   const [position, setPosition] = useState({ x, y });
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isEditing, setIsEditing] = useState(false);
-  const [editText, setEditText] = useState(text);
+  const [localText, setLocalText] = useState(text);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    setLocalText(text);
+  }, [text]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
@@ -62,10 +66,33 @@ export default function StickyNote({
 
   const handleBlur = () => {
     setIsEditing(false);
-    if (editText !== text) {
-      onTextChange(id, editText);
+    if (localText !== text) {
+      onTextChange(id, localText);
     }
   };
+
+  useEffect(() => {
+    if (isDragging) {
+      const handleGlobalMouseMove = (e: MouseEvent) => {
+        const newX = e.clientX - dragOffset.x;
+        const newY = e.clientY - dragOffset.y;
+        setPosition({ x: newX, y: newY });
+      };
+
+      const handleGlobalMouseUp = () => {
+        setIsDragging(false);
+        onDragEnd(id, position.x, position.y);
+      };
+
+      document.addEventListener("mousemove", handleGlobalMouseMove);
+      document.addEventListener("mouseup", handleGlobalMouseUp);
+
+      return () => {
+        document.removeEventListener("mousemove", handleGlobalMouseMove);
+        document.removeEventListener("mouseup", handleGlobalMouseUp);
+      };
+    }
+  }, [isDragging, dragOffset, id, position.x, position.y, onDragEnd]);
 
   return (
     <div
@@ -89,8 +116,8 @@ export default function StickyNote({
       {isEditing ? (
         <textarea
           ref={textareaRef}
-          value={editText}
-          onChange={(e) => setEditText(e.target.value)}
+          value={localText}
+          onChange={(e) => setLocalText(e.target.value)}
           onBlur={handleBlur}
           style={{
             width: "100%",

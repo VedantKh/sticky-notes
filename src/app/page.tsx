@@ -131,7 +131,7 @@ export default function Home() {
   const handleTextChange = async (id: string, newText: string) => {
     try {
       // Optimistically update the local state first
-      setNotes(current =>
+      setNotes((current) =>
         current.map((note) =>
           note.id === id ? { ...note, text: newText } : note
         )
@@ -145,7 +145,7 @@ export default function Home() {
 
       if (error) {
         // If server update fails, revert the optimistic update
-        setNotes(current =>
+        setNotes((current) =>
           current.map((note) =>
             note.id === id ? { ...note, text: note.text } : note
           )
