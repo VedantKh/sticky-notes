@@ -1,42 +1,159 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import StickyNote from "@/components/StickyNote";
+import { useRouter } from "next/navigation";
 
 interface Note {
   id: string;
   text: string;
   x: number;
   y: number;
+  user_id: string;
 }
 
 export default function Home() {
-  const [notes, setNotes] = useState<Note[]>([
-    { id: "1", text: "This is a sample note", x: 100, y: 100 },
-  ]);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [loading, setLoading] = useState(true);
+  const supabase = createClientComponentClient();
+  const router = useRouter();
 
-  const handleDragEnd = (id: string, x: number, y: number) => {
-    setNotes(notes.map((note) => (note.id === id ? { ...note, x, y } : note)));
+  // Fetch notes on component mount
+  useEffect(() => {
+    const fetchNotes = async () => {
+      try {
+        const { data: notes, error } = await supabase
+          .from("notes")
+          .select("*")
+          .order("created_at", { ascending: true });
+
+        if (error) {
+          throw error;
+        }
+
+        if (notes) {
+          setNotes(notes);
+        }
+      } catch (error) {
+        console.error("Error fetching notes:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNotes();
+
+    // Set up realtime subscription
+    const channel = supabase
+      .channel("notes_changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "notes",
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            setNotes((current) => [...current, payload.new as Note]);
+          } else if (payload.eventType === "UPDATE") {
+            setNotes((current) =>
+              current.map((note) =>
+                note.id === payload.new.id ? (payload.new as Note) : note
+              )
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    // Check for authentication
+    const checkUser = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/login");
+      }
+    };
+
+    checkUser();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, router]);
+
+  const handleDragEnd = async (id: string, x: number, y: number) => {
+    try {
+      const { error } = await supabase
+        .from("notes")
+        .update({ x, y })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setNotes(
+        notes.map((note) => (note.id === id ? { ...note, x, y } : note))
+      );
+    } catch (error) {
+      console.error("Error updating note position:", error);
+    }
   };
 
-  const addNewNote = () => {
+  const addNewNote = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return;
+
     const newNote: Note = {
       id: Date.now().toString(),
       text: "New note",
       x: Math.random() * (window.innerWidth - 200),
       y: Math.random() * (window.innerHeight - 150),
+      user_id: user.id,
     };
-    setNotes([...notes, newNote]);
+
+    try {
+      const { error } = await supabase.from("notes").insert(newNote);
+
+      if (error) throw error;
+
+      // Note: We don't need to setNotes here because the realtime subscription will handle it
+    } catch (error) {
+      console.error("Error adding new note:", error);
+    }
   };
 
-  const handleTextChange = (id: string, newText: string) => {
-    setNotes(
-      // Maps through the notes array and updates the text of the note with matching id
-      // If the note id matches, spread the existing note properties and update the text
-      // Otherwise return the note unchanged
-      notes.map((note) => (note.id === id ? { ...note, text: newText } : note))
-    );
+  const handleTextChange = async (id: string, newText: string) => {
+    try {
+      const { error } = await supabase
+        .from("notes")
+        .update({ text: newText })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setNotes(
+        notes.map((note) =>
+          note.id === id ? { ...note, text: newText } : note
+        )
+      );
+    } catch (error) {
+      console.error("Error updating note text:", error);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        Loading...
+      </div>
+    );
+  }
 
   return (
     <main
