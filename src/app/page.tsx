@@ -130,18 +130,30 @@ export default function Home() {
 
   const handleTextChange = async (id: string, newText: string) => {
     try {
+      // Optimistically update the local state first
+      setNotes(current =>
+        current.map((note) =>
+          note.id === id ? { ...note, text: newText } : note
+        )
+      );
+
+      // Then update the server
       const { error } = await supabase
         .from("notes")
         .update({ text: newText })
         .eq("id", id);
 
-      if (error) throw error;
+      if (error) {
+        // If server update fails, revert the optimistic update
+        setNotes(current =>
+          current.map((note) =>
+            note.id === id ? { ...note, text: note.text } : note
+          )
+        );
+        throw error;
+      }
 
-      setNotes(
-        notes.map((note) =>
-          note.id === id ? { ...note, text: newText } : note
-        )
-      );
+      // No need to update state here since we already did it optimistically
     } catch (error) {
       console.error("Error updating note text:", error);
     }
