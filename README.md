@@ -1,6 +1,6 @@
 # Sticky Notes App
 
-Built a real-tim sticky notes application built with Next.js 14, Supabase, and TypeScript. Did this to practice auth and full stack.
+Built a real-time sticky notes application built with Next.js 14, Supabase, and TypeScript. Did this to practice auth and full stack.
 
 ## Features
 
