@@ -94,6 +94,19 @@ export default function StickyNote({
     }
   }, [isDragging, dragOffset, id, position.x, position.y, onDragEnd]);
 
+  const autoResizeTextArea = () => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
+    }
+  };
+
+  useEffect(() => {
+    if (isEditing) {
+      autoResizeTextArea();
+    }
+  }, [localText, isEditing]);
+
   return (
     <div
       style={{
