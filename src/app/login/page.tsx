@@ -45,7 +45,9 @@ export default function Login() {
 
       if (error) throw error;
 
-      setError("Check your email for the confirmation link.");
+      setError(
+        "✉️ Success! Please check your email for the confirmation link to complete your signup."
+      );
     } catch (error: any) {
       setError(error.message);
     }
