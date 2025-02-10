@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import StickyNote from "@/components/StickyNote";
 import { useRouter } from "next/navigation";
+import * as api from "@/utils/api";
 
 interface Note {
   id: string;
@@ -21,28 +22,18 @@ export default function Home() {
 
   // Fetch notes on component mount
   useEffect(() => {
-    const fetchNotes = async () => {
+    const loadNotes = async () => {
       try {
-        const { data: notes, error } = await supabase
-          .from("notes")
-          .select("*")
-          .order("created_at", { ascending: true });
-
-        if (error) {
-          throw error;
-        }
-
-        if (notes) {
-          setNotes(notes);
-        }
+        const notes = await api.fetchNotes();
+        setNotes(notes);
       } catch (error) {
-        console.error("Error fetching notes:", error);
+        console.error("Error loading notes:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchNotes();
+    loadNotes();
 
     // Set up realtime subscription
     const channel = supabase
@@ -87,13 +78,7 @@ export default function Home() {
 
   const handleDragEnd = async (id: string, x: number, y: number) => {
     try {
-      const { error } = await supabase
-        .from("notes")
-        .update({ x, y })
-        .eq("id", id);
-
-      if (error) throw error;
-
+      await api.updateNote(id, { x, y });
       setNotes(
         notes.map((note) => (note.id === id ? { ...note, x, y } : note))
       );
@@ -103,25 +88,15 @@ export default function Home() {
   };
 
   const addNewNote = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) return;
-
-    const newNote: Note = {
+    const newNote = {
       id: Date.now().toString(),
       text: "New note",
       x: Math.random() * (window.innerWidth - 200),
       y: Math.random() * (window.innerHeight - 150),
-      user_id: user.id,
     };
 
     try {
-      const { error } = await supabase.from("notes").insert(newNote);
-
-      if (error) throw error;
-
+      const createdNote = await api.createNote(newNote);
       // Note: We don't need to setNotes here because the realtime subscription will handle it
     } catch (error) {
       console.error("Error adding new note:", error);
@@ -130,32 +105,22 @@ export default function Home() {
 
   const handleTextChange = async (id: string, newText: string) => {
     try {
-      // Optimistically update the local state first
+      // Optimistic update
       setNotes((current) =>
         current.map((note) =>
           note.id === id ? { ...note, text: newText } : note
         )
       );
 
-      // Then update the server
-      const { error } = await supabase
-        .from("notes")
-        .update({ text: newText })
-        .eq("id", id);
-
-      if (error) {
-        // If server update fails, revert the optimistic update
-        setNotes((current) =>
-          current.map((note) =>
-            note.id === id ? { ...note, text: note.text } : note
-          )
-        );
-        throw error;
-      }
-
-      // No need to update state here since we already did it optimistically
+      await api.updateNote(id, { text: newText });
     } catch (error) {
       console.error("Error updating note text:", error);
+      // Revert optimistic update on error
+      setNotes((current) =>
+        current.map((note) =>
+          note.id === id ? { ...note, text: note.text } : note
+        )
+      );
     }
   };
 
